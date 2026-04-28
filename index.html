@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BOM 소요량 대시보드</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+:root {
+  --bg: #0d0f12;
+  --surface: #161a20;
+  --surface2: #1d2229;
+  --border: rgba(255,255,255,0.07);
+  --border2: rgba(255,255,255,0.13);
+  --text: #e8ecf0;
+  --text2: #8a9099;
+  --text3: #4e5560;
+  --accent-ds: #4f9cf9;
+  --accent-eh: #3ecf8e;
+  --accent-r: #f5a623;
+  --accent-sl: #a78bfa;
+  --accent-ds-dim: rgba(79,156,249,0.12);
+  --accent-eh-dim: rgba(62,207,142,0.12);
+  --accent-r-dim: rgba(245,166,35,0.12);
+  --accent-sl-dim: rgba(167,139,250,0.12);
+  --font: 'IBM Plex Sans KR', sans-serif;
+  --mono: 'IBM Plex Mono', monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 14px; }
+body { background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100vh; }
+
+/* ── 레이아웃 ── */
+.layout { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+
+/* ── 사이드바 ── */
+.sidebar { background: var(--surface); border-right: 1px solid var(--border); padding: 24px 0; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+.logo { padding: 0 20px 24px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+.logo-title { font-size: 13px; font-weight: 600; letter-spacing: 0.08em; color: var(--text); text-transform: uppercase; }
+.logo-sub { font-size: 11px; color: var(--text3); margin-top: 3px; font-family: var(--mono); }
+.nav-section { padding: 0 12px; margin-bottom: 8px; }
+.nav-label { font-size: 10px; font-weight: 600; color: var(--text3); letter-spacing: 0.1em; text-transform: uppercase; padding: 0 8px; margin-bottom: 4px; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; color: var(--text2); transition: all 0.15s; margin-bottom: 1px; border: 1px solid transparent; }
+.nav-item:hover { background: var(--surface2); color: var(--text); }
+.nav-item.active { color: var(--text); background: var(--surface2); border-color: var(--border2); }
+.nav-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.dot-ds { background: var(--accent-ds); }
+.dot-eh { background: var(--accent-eh); }
+.dot-r  { background: var(--accent-r); }
+.dot-sl { background: var(--accent-sl); }
+.dot-all { background: var(--text3); }
+.nav-count { margin-left: auto; font-size: 11px; font-family: var(--mono); color: var(--text3); }
+.nav-item.active .nav-count { color: var(--text2); }
+.sidebar-footer { margin-top: auto; padding: 16px 20px 0; border-top: 1px solid var(--border); }
+.sidebar-footer p { font-size: 11px; color: var(--text3); font-family: var(--mono); }
+
+/* ── 메인 ── */
+.main { padding: 28px 32px; overflow-x: hidden; }
+.header { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 28px; }
+.header-left h1 { font-size: 20px; font-weight: 500; color: var(--text); }
+.header-left p { font-size: 12px; color: var(--text3); margin-top: 4px; font-family: var(--mono); }
+.header-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.search-box { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--border2); border-radius: 8px; padding: 7px 12px; }
+.search-box svg { width: 14px; height: 14px; color: var(--text3); flex-shrink: 0; }
+.search-box input { background: none; border: none; outline: none; color: var(--text); font-size: 13px; font-family: var(--font); width: 180px; }
+.search-box input::placeholder { color: var(--text3); }
+.btn-refresh { background: var(--surface); border: 1px solid var(--border2); color: var(--text2); padding: 7px 14px; border-radius: 8px; font-size: 12px; cursor: pointer; font-family: var(--font); transition: all 0.15s; display: flex; align-items: center; gap: 6px; }
+.btn-refresh:hover { border-color: var(--border2); color: var(--text); background: var(--surface2); }
+
+/* ── 메트릭 카드 ── */
+.metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+.metric { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; position: relative; overflow: hidden; }
+.metric::before { content:''; position: absolute; top: 0; left: 0; right: 0; height: 2px; }
+.metric.ds::before { background: var(--accent-ds); }
+.metric.eh::before { background: var(--accent-eh); }
+.metric.r::before  { background: var(--accent-r); }
+.metric.sl::before { background: var(--accent-sl); }
+.metric.total::before { background: linear-gradient(90deg, var(--accent-ds), var(--accent-sl)); }
+.metric-label { font-size: 11px; color: var(--text3); font-family: var(--mono); letter-spacing: 0.04em; margin-bottom: 8px; }
+.metric-val { font-size: 26px; font-weight: 500; color: var(--text); font-family: var(--mono); letter-spacing: -0.02em; }
+.metric-sub { font-size: 11px; color: var(--text3); margin-top: 4px; }
+
+/* ── 차트 행 ── */
+.chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; }
+.card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.card-title { font-size: 12px; font-weight: 500; color: var(--text2); letter-spacing: 0.04em; text-transform: uppercase; }
+.chart-wrap { position: relative; height: 180px; }
+
+/* ── 바 차트 커스텀 ── */
+.bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 7px; }
+.bar-sheet { width: 48px; text-align: right; font-size: 11px; font-family: var(--mono); color: var(--text3); flex-shrink: 0; }
+.bar-track { flex: 1; background: var(--surface2); border-radius: 3px; height: 14px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 3px; transition: width 0.4s cubic-bezier(0.4,0,0.2,1); }
+.bar-num { width: 52px; font-size: 11px; font-family: var(--mono); color: var(--text2); text-align: right; flex-shrink: 0; }
+
+/* ── 테이블 ── */
+.table-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.table-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.table-meta { font-size: 11px; color: var(--text3); font-family: var(--mono); }
+.table-scroll { overflow-x: auto; max-height: 480px; overflow-y: auto; }
+table { width: 100%; border-collapse: collapse; }
+thead { position: sticky; top: 0; z-index: 2; background: var(--surface); }
+thead th { padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 500; color: var(--text3); letter-spacing: 0.06em; text-transform: uppercase; border-bottom: 1px solid var(--border); white-space: nowrap; }
+th.num, td.num { text-align: right; }
+tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }
+tbody tr:hover { background: var(--surface2); }
+tbody td { padding: 9px 14px; font-size: 12px; color: var(--text); white-space: nowrap; }
+td.partno { font-family: var(--mono); font-size: 11px; color: var(--text2); }
+td.zero { color: var(--text3); }
+td.high { color: var(--accent-eh); font-weight: 500; }
+
+/* ── 배지 ── */
+.badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-family: var(--mono); font-weight: 500; letter-spacing: 0.04em; }
+.badge-ds { background: var(--accent-ds-dim); color: var(--accent-ds); }
+.badge-eh { background: var(--accent-eh-dim); color: var(--accent-eh); }
+.badge-r  { background: var(--accent-r-dim);  color: var(--accent-r); }
+.badge-sl { background: var(--accent-sl-dim); color: var(--accent-sl); }
+
+/* ── 스크롤바 ── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+/* ── 반응형 ── */
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+  .metrics { grid-template-columns: repeat(2,1fr); }
+  .chart-row { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- 사이드바 -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-title">PSK MES</div>
+      <div class="logo-sub">BOM 소요량 모니터</div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">전체</div>
+      <div class="nav-item active" onclick="setGroup('ALL')" id="nav-ALL">
+        <span class="nav-dot dot-all"></span> 전체 라인
+        <span class="nav-count" id="cnt-ALL"></span>
+      </div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">그룹</div>
+      <div class="nav-item" onclick="setGroup('DS')" id="nav-DS">
+        <span class="nav-dot dot-ds"></span> DS (Discharge)
+        <span class="nav-count" id="cnt-DS"></span>
+      </div>
+      <div class="nav-item" onclick="setGroup('EH')" id="nav-EH">
+        <span class="nav-dot dot-eh"></span> EH
+        <span class="nav-count" id="cnt-EH"></span>
+      </div>
+      <div class="nav-item" onclick="setGroup('R')" id="nav-R">
+        <span class="nav-dot dot-r"></span> R (Rear)
+        <span class="nav-count" id="cnt-R"></span>
+      </div>
+      <div class="nav-item" onclick="setGroup('SL')" id="nav-SL">
+        <span class="nav-dot dot-sl"></span> SL (Suction/Liq)
+        <span class="nav-count" id="cnt-SL"></span>
+      </div>
+    </div>
+
+    <div class="nav-section" style="margin-top:4px;">
+      <div class="nav-label">개별 라인</div>
+      <div id="navIndividual"></div>
+    </div>
+
+    <div class="sidebar-footer">
+      <p id="lastUpdated"></p>
+    </div>
+  </aside>
+
+  <!-- 메인 -->
+  <main class="main">
+    <div class="header">
+      <div class="header-left">
+        <h1 id="pageTitle">전체 라인</h1>
+        <p id="pageSubtitle"></p>
+      </div>
+      <div class="header-right">
+        <div class="search-box">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          </svg>
+          <input type="text" id="search" placeholder="품번 / 품명 검색..." oninput="renderTable()">
+        </div>
+        <button class="btn-refresh" onclick="renderAll()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          새로고침
+        </button>
+      </div>
+    </div>
+
+    <!-- 메트릭 -->
+    <div class="metrics" id="metrics"></div>
+
+    <!-- 차트 -->
+    <div class="chart-row">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">일별 총 소요량</span>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="lineChart" role="img" aria-label="D0~D4 일별 소요량 막대 차트"></canvas>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">라인별 D0 소요량</span>
+        </div>
+        <div id="barChart" style="padding-top:2px;"></div>
+      </div>
+    </div>
+
+    <!-- 테이블 -->
+    <div class="table-card">
+      <div class="table-header">
+        <span class="card-title">소요량 상세</span>
+        <span class="table-meta" id="tableMeta"></span>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>라인</th>
+              <th>품번</th>
+              <th>품명</th>
+              <th class="num">D0</th>
+              <th class="num">D1</th>
+              <th class="num">D2</th>
+              <th class="num">D3</th>
+              <th class="num">D4</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+const DATA = {
+  "DS-01":[["FA1A4GXHBB04YA","HOSE ASS'Y-SUC(3.3람다,R134a)/내수.북미",40,80,0,0,0],["A000179","소음기",40,80,0,0,0],["H000533","AL PIPE",40,80,0,0,0],["H000534","AL PIPE",40,80,0,0,0],["M001605","Fitting_Muffler S",40,80,0,0,0],["M001284","C/V STEM",40,80,0,0,0],["M000073","CAP",40,80,0,0,0],["M000660","SUMI TUBE",40,80,0,0,0],["M001285","C/V CORE",40,80,0,0,0],["M001286","C/V CAP",40,80,0,0,0],["M001377","CAP",40,80,0,0,0],["M001418","성형호스",40,80,0,0,0],["M002539","Fitting_Muffler",40,80,0,0,0],["M003078","LABEL",40,80,0,0,0],["FA1A4HNECA04","FT-ASY-A/C SUC",80,0,0,0,0],["H001326","A/C HOSE",80,0,0,0,0],["M002828","Fitting_Non-Brazing(극소R)",80,0,0,0,0],["M002829","Fitting_Non-Brazing(극소R)",80,0,0,0,0],["M003419","LABEL",80,0,0,0,0],["FA1A4HRABA06","FT0ASY-A/C-SUC(람다3.5T)",40,40,0,0,0],["M001010","INSULATION",40,40,0,0,0],["M001285","C/V CORE",40,40,0,0,0],["M001286","C/V CAP",40,40,0,0,0],["M001420","성형호스",40,40,0,0,0],["M001929","Fitting_Muffler",40,40,0,0,0],["M001953","Fitting_Muffler",40,40,0,0,0],["M003103","LABEL",40,40,0,0,0],["FA1A4RGEHA06","SUC PIPE ASSY-SV10",50,0,0,0,0],["M002499","Ass'y",50,0,0,0,0],["FA1A4RGEHC06","SUC HOSE ASSY-Chiller",40,0,0,0,0],["H001426","A/C HOSE",40,0,0,0,0],["M001363","PT센서",40,0,0,0,0],["M002641","19*1.6*197R",40,0,0,0,0],["M002643","Fitting_Non-Brazing(극소R)",40,0,0,0,0],["FA1A4RGHBB06","SUC HOSE ASSY(람다3.5,R1234yf)",40,40,0,0,0],["M001285","C/V CORE",40,40,0,0,0],["M001286","C/V CAP",40,40,0,0,0],["M001322","FLEX GUARD",40,40,0,0,0],["M001420","성형호스",40,40,0,0,0],["M001929","Fitting_Muffler",40,40,0,0,0],["M002173","Fitting_Muffler",40,40,0,0,0],["M003787","LABEL",40,40,0,0,0]],
+  "DS-02":[["FA1A0HMEAA07","FT-ASY-A/C DIS",170,0,0,0,0],["M000582","BUSH",170,0,0,0,0],["M001203","J/F CAP",170,0,0,0,0],["M001224","O-RING",170,0,0,0,0],["M001446","FERRULE",170,0,0,0,0],["M001471","D/O-RING",170,0,0,0,0],["M002737","Fitting_Muffler",170,0,0,0,0],["M003528","Ass'y_Sub",170,0,0,0,0],["M003570","LABEL",170,0,0,0,0],["M003684","PT센서(저압)",170,0,0,0,0],["M003837","CAP J/FLANGE",170,0,0,0,0],["FA1A0HNEGA08","FT-ASY-A/C DIS",0,450,0,0,0],["H001309","A/C HOSE",0,450,0,0,0],["H001311","A/C HOSE",0,450,0,0,0],["M000560","BRKT",0,450,0,0,0],["M001203","J/F CAP",0,450,0,0,0],["M001223","D O-RING",0,450,0,0,0],["M001224","O-RING",0,450,0,0,0],["M001260","ISOLATOR",0,450,0,0,0],["M001435","D/O-RING FERRULE",0,450,0,0,0],["M002164","Fitting_Muffler",0,450,0,0,0],["M002858","Ass'y_Sub",0,450,0,0,0],["M003413","LABEL",0,450,0,0,0],["M003525","PT센서(고압)",0,450,0,0,0],["FA1A0KMVBA08","DIS-HOSE ASS'Y(LHD,HP,2WD)",24,0,0,0,0],["M001203","J/F CAP",24,0,0,0,0],["M001224","O-RING",24,0,0,0,0],["M001446","FERRULE",24,0,0,0,0],["M001471","D/O-RING",24,0,0,0,0],["M002023","Fitting_Muffler",24,0,0,0,0],["M002310","LABEL",24,0,0,0,0],["FA1A0RGEHE09","DIS PIPE ASSY#1-EXV 10F",0,40,0,0,0],["M002495","Ass'y(극소R)",0,40,0,0,0],["FA1A8RGEBB05","FT-ASY A/C JUMPER",40,20,0,0,0],["M002507","Ass'y(극소R)",40,20,0,0,0]],
+  "DS-03":[["FA1A0L3LAA04","FT-ASY-A/C-DIS",0,360,0,0,0],["H000886","A/C HOSE",0,360,0,0,0],["W000083","A/C HOSE",0,360,0,0,0],["M000149","RUBBER",0,360,0,0,0],["M001099","SHP'G CAP",0,360,0,0,0],["M001172","BUSH",0,360,0,0,0],["M001203","J/F CAP",0,360,0,0,0],["M001224","O-RING",0,360,0,0,0],["M001462","SEAL WASHER",0,360,0,0,0],["M002926","Fitting_Muffler",0,360,0,0,0],["M002929","Fitting_Connector",0,360,0,0,0],["M003188","FERRULE",0,360,0,0,0],["M003189","O-RING",0,360,0,0,0],["M003326","LABEL",0,360,0,0,0],["M003525","PT센서(고압)",0,360,0,0,0],["FA1A0L3LCA04","FT-ASY-A/C-DIS",330,240,0,0,0],["H000886","A/C HOSE",330,240,0,0,0],["W000083","A/C HOSE",330,240,0,0,0],["M000149","RUBBER",330,240,0,0,0],["M001172","BUSH",330,240,0,0,0],["M001203","J/F CAP",330,240,0,0,0],["M001224","O-RING",330,240,0,0,0],["M002927","Fitting_Muffler",330,240,0,0,0],["M002929","Fitting_Connector",330,240,0,0,0],["M003188","FERRULE",330,240,0,0,0],["M003189","O-RING",330,240,0,0,0],["M003328","LABEL",330,240,0,0,0],["M003525","PT센서(고압)",330,240,0,0,0]],
+  "DS-05":[["FA1A3L3LAA05ZA","FT-ASY-A/C LIQ/DIS",260,200,0,0,0],["M000223","C/V CAP",260,200,0,0,0],["M001203","J/F CAP",260,200,0,0,0],["M001224","O-RING",260,200,0,0,0],["M001285","C/V CORE",260,200,0,0,0],["M001447","FERRULE",260,200,0,0,0],["M001471","D/O-RING",260,200,0,0,0],["M002745","Fitting_Muffler",260,200,0,0,0],["M003525","PT센서(고압)",260,200,0,0,0]],
+  "DS-06":[["FA1A0CEECC02","SUB",100,100,100,100,100],["H001294","A/C HOSE",100,100,100,100,100],["M001203","J/F CAP",100,100,100,100,100],["M001224","O-RING",100,100,100,100,100],["M001446","FERRULE",100,100,100,100,100]],
+  "EH1":[["FA1A0CNHAA03","DIS-HOSE ASS'Y(KAPPA1.6,R1234yf)",150,150,0,0,0],["M001203","J/F CAP",150,150,0,0,0],["M001224","O-RING",150,150,0,0,0],["M001446","FERRULE",150,150,0,0,0],["M003525","PT센서(고압)",150,150,0,0,0]],
+  "EH2":[["FA1A0CTEDB02","FT-ASY-A/C-DIS",270,150,0,0,0],["M003730","Ass'y",270,150,0,0,0],["M001203","J/F CAP",270,150,0,0,0],["M001224","O-RING",270,150,0,0,0]],
+  "R-01":[["FA1B2HMEAA07","FA1B2HMEAA07",90,90,0,0,0],["A000427","AL PIPE",90,90,0,0,0],["M001203","J/F CAP",90,90,0,0,0],["M001224","O-RING",90,90,0,0,0]],
+  "R-02":[["FA1B2L3KAB03","REAR PIPE(DUAL,내수/유럽)",200,0,0,0,0],["A000151","AL PIPE",200,0,0,0,0],["M001203","J/F CAP",200,0,0,0,0]],
+  "R-03":[["FA1B2HMEAB06","REAR SUC&LIQ ASS'Y-SHORT",0,140,0,0,0],["H001703","A/C HOSE",0,140,0,0,0],["M001203","J/F CAP",0,140,0,0,0]],
+  "SL-02":[["FA1A6CTEDA02","FT-ASY-A/C SUC/LIQ",180,0,0,0,0],["A000237","IHX-A",180,0,0,0,0],["M001203","J/F CAP",180,0,0,0,0]],
+  "SL-03":[["FA1A6GVHAB05","BTXV&HOSE&PIPE ASSY(R134a,LHD)",110,0,0,0,0],["A000184","IHX-A",110,0,0,0,0],["M001203","J/F CAP",110,0,0,0,0]],
+  "SL-04":[["FA1A6DNEAA02","LTXV&SUC&LIQ TUBE ASSY(LHD,R1234yf)",400,320,0,0,0],["A000064","SUB",400,320,0,0,0],["M001203","J/F CAP",400,320,0,0,0]],
+  "SL-05":[["FA1A6CNHAA06","FT ASY A/C SUC/LIQ",30,0,0,0,0],["A000007","IHX-A",30,0,0,0,0]],
+  "SL-06":[["FA1A6CNKBC09","FT ASY A/C SUC/LIQ",860,0,0,0,0],["A000043","SUB",860,0,0,0,0],["M001203","J/F CAP",860,0,0,0,0]],
+  "SL-07":[["FA1A6SPHAB05PND","FT-ASY-A/C SUC&LIQ(GAMMA R134a)",0,630,0,0,0],["A000105","IHX-A",0,630,0,0,0]],
+  "SL-08":[["FA1A6DPGDE02","FT-ASY-A/C SUC/LIQ(LHD,THETA,R1234yf)",0,610,0,0,0],["A000057","IHX-A",0,610,0,0,0]],
+  "SL-10":[["FA1A9HMEAA09","TXV&HOSE&PIPE ASS'Y",72,72,0,0,0],["A000533","A/C HOSE",72,72,0,0,0]],
+  "SL-11":[["FA1A6K7XKB01","FT-ASY-A/C SUC/LIQ(RHD,AWD,R1234yf)",5,48,0,0,0],["A000361","IHX-A",5,48,0,0,0]]
+};
+
+const SHEETS = Object.keys(DATA);
+let activeGroup = 'ALL';
+let chartInst = null;
+
+function getGroup(s) {
+  if (s.startsWith('DS')) return 'DS';
+  if (s.startsWith('EH')) return 'EH';
+  if (s.startsWith('R-')) return 'R';
+  return 'SL';
+}
+
+function sheetsOf(g) {
+  if (g === 'ALL') return SHEETS;
+  if (['DS','EH','R','SL'].includes(g)) return SHEETS.filter(s => getGroup(s) === g);
+  return [g];
+}
+
+function rowsOf(g) {
+  return sheetsOf(g).flatMap(s => (DATA[s]||[]).map(r => [s,...r]));
+}
+
+function fmt(n) { return n === 0 ? '-' : n.toLocaleString(); }
+
+// 사이드바 개별 라인
+function buildNav() {
+  const el = document.getElementById('navIndividual');
+  el.innerHTML = SHEETS.map(s => {
+    const g = getGroup(s).toLowerCase();
+    return `<div class="nav-item" onclick="setGroup('${s}')" id="nav-${s}">
+      <span class="nav-dot dot-${g}"></span>${s}
+      <span class="nav-count" id="cnt-${s}"></span>
+    </div>`;
+  }).join('');
+
+  // 카운트
+  const groups = ['ALL','DS','EH','R','SL',...SHEETS];
+  groups.forEach(g => {
+    const el = document.getElementById('cnt-'+g);
+    if (el) el.textContent = rowsOf(g).length;
+  });
+
+  document.getElementById('lastUpdated').textContent =
+    '업데이트: ' + new Date().toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+}
+
+function setGroup(g) {
+  activeGroup = g;
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  const t = document.getElementById('nav-'+g);
+  if (t) t.classList.add('active');
+  document.getElementById('search').value = '';
+  renderAll();
+}
+
+function renderAll() {
+  renderHeader();
+  renderMetrics();
+  renderLineChart();
+  renderBarChart();
+  renderTable();
+}
+
+function renderHeader() {
+  const labels = { ALL:'전체 라인', DS:'DS 그룹 — Discharge', EH:'EH 그룹', R:'R 그룹 — Rear', SL:'SL 그룹 — Suction/Liquid' };
+  const title = labels[activeGroup] || activeGroup;
+  const rows = rowsOf(activeGroup);
+  const d0 = rows.reduce((a,r)=>a+r[3],0);
+  document.getElementById('pageTitle').textContent = title;
+  document.getElementById('pageSubtitle').textContent =
+    `${rows.length}개 품번 · D0 총 소요량 ${d0.toLocaleString()}`;
+}
+
+function renderMetrics() {
+  const rows = rowsOf(activeGroup);
+  const d0 = rows.reduce((a,r)=>a+r[3],0);
+  const d1 = rows.reduce((a,r)=>a+r[4],0);
+  const sheets = sheetsOf(activeGroup);
+  const nonZero = rows.filter(r=>r[3]>0).length;
+  document.getElementById('metrics').innerHTML = `
+    <div class="metric total">
+      <div class="metric-label">활성 라인 수</div>
+      <div class="metric-val">${sheets.length}</div>
+      <div class="metric-sub">시트 기준</div>
+    </div>
+    <div class="metric ds">
+      <div class="metric-label">총 품번</div>
+      <div class="metric-val">${rows.length.toLocaleString()}</div>
+      <div class="metric-sub">D0 가동 ${nonZero}개</div>
+    </div>
+    <div class="metric eh">
+      <div class="metric-label">D0 소요량</div>
+      <div class="metric-val">${d0.toLocaleString()}</div>
+      <div class="metric-sub">오늘 기준</div>
+    </div>
+    <div class="metric r">
+      <div class="metric-label">D1 소요량</div>
+      <div class="metric-val">${d1.toLocaleString()}</div>
+      <div class="metric-sub">내일 기준</div>
+    </div>
+  `;
+}
+
+function renderLineChart() {
+  const rows = rowsOf(activeGroup);
+  const data = [0,1,2,3,4].map(i => rows.reduce((a,r)=>a+r[3+i],0));
+  const ctx = document.getElementById('lineChart').getContext('2d');
+  if (chartInst) chartInst.destroy();
+  chartInst = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: ['D0','D1','D2','D3','D4'],
+      datasets: [{
+        data,
+        backgroundColor: ['#4f9cf9','#3ecf8e','rgba(255,255,255,0.08)','rgba(255,255,255,0.08)','rgba(255,255,255,0.08)'],
+        borderRadius: 4,
+        borderSkipped: false
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: {
+        backgroundColor: '#1d2229', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1,
+        titleColor: '#8a9099', bodyColor: '#e8ecf0', padding: 10,
+        callbacks: { label: ctx => ' ' + ctx.raw.toLocaleString() }
+      }},
+      scales: {
+        x: { grid: { display: false }, ticks: { color: '#4e5560', font: { size: 11, family: "'IBM Plex Mono'" } } },
+        y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#4e5560', font: { size: 11, family: "'IBM Plex Mono'" } } }
+      }
+    }
+  });
+}
+
+function renderBarChart() {
+  const sheets = sheetsOf(activeGroup);
+  const bySheet = sheets.map(s => [s, (DATA[s]||[]).reduce((a,r)=>a+r[2],0)]).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  const max = bySheet[0]?.[1] || 1;
+  const colors = { DS:'#4f9cf9', EH:'#3ecf8e', R:'#f5a623', SL:'#a78bfa' };
+  const el = document.getElementById('barChart');
+  if (!bySheet.length) { el.innerHTML = '<p style="color:var(--text3);font-size:12px;padding:8px;">데이터 없음</p>'; return; }
+  el.innerHTML = bySheet.map(([s,v]) => {
+    const pct = Math.round(v/max*100);
+    const col = colors[getGroup(s)];
+    return `<div class="bar-row">
+      <div class="bar-sheet">${s}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${col}"></div></div>
+      <div class="bar-num">${v.toLocaleString()}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderTable() {
+  const q = document.getElementById('search').value.toLowerCase();
+  let rows = rowsOf(activeGroup);
+  if (q) rows = rows.filter(r => r[1].toLowerCase().includes(q) || r[2].toLowerCase().includes(q));
+  const LIMIT = 300;
+  const tb = document.getElementById('tableBody');
+  document.getElementById('tableMeta').textContent = `${Math.min(rows.length,LIMIT)} / ${rows.length}건`;
+  if (!rows.length) {
+    tb.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text3);">검색 결과 없음</td></tr>`;
+    return;
+  }
+  const g2b = { DS:'badge-ds', EH:'badge-eh', R:'badge-r', SL:'badge-sl' };
+  tb.innerHTML = rows.slice(0,LIMIT).map(r => {
+    const bc = g2b[getGroup(r[0])];
+    const qtds = [3,4,5,6,7].map(i => {
+      const v = r[i];
+      const cls = v===0?'zero':v>200?'high':'';
+      return `<td class="num ${cls}">${fmt(v)}</td>`;
+    }).join('');
+    return `<tr>
+      <td><span class="badge ${bc}">${r[0]}</span></td>
+      <td class="partno">${r[1]}</td>
+      <td>${r[2]}</td>
+      ${qtds}
+    </tr>`;
+  }).join('');
+}
+
+// 초기화
+buildNav();
+renderAll();
+</script>
+</body>
+</html>
